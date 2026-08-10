@@ -4,10 +4,10 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
-
 model Employee {
   id          String   @id @default(cuid())
   employeeId  String   @unique // human-friendly ID, e.g. EMP-001
