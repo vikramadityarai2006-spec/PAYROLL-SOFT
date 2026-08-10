@@ -1,0 +1,123 @@
+// Payroll Management — Prisma schema (SQLite, local storage)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id          String   @id @default(cuid())
+  employeeId  String   @unique // human-friendly ID, e.g. EMP-001
+  name        String
+  department  String?
+  designation String?
+  joiningDate DateTime?
+  active      Boolean  @default(true)
+
+  // Bank details (confidential)
+  fromAccount       String? // "From Account" payer bucket (e.g. AL / Chetna / Gpay)
+  bankName          String?
+  bankAccountNumber String? // stored full; ALWAYS masked in UI
+  ifsc              String?
+
+  // Salary structure (current/revised)
+  oldSalary                  Float?
+  fixedIncrease              Float?
+  existingMonthlyRemuneration Float?
+  existingPliComponent       Float?
+  revisedMonthlyRemuneration Float   @default(0)
+  revisedFixedSalary         Float   @default(0)
+  revisedPliComponent        Float   @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  records PayrollRecord[]
+}
+
+model PayrollRun {
+  id        String   @id @default(cuid())
+  month     String   @unique // "YYYY-MM", always configurable, never hard-coded
+  label     String // human label, e.g. "April 2026"
+  status    String   @default("Draft") // Draft | Approved | Paid (run-level convenience)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  records PayrollRecord[]
+}
+
+model PayrollRecord {
+  id    String @id @default(cuid())
+  run   PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId String
+
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeId String?
+
+  // Snapshot of identity/bank at time of run (so history is stable)
+  employeeName      String
+  bankName          String?
+  bankAccountNumber String?
+  ifsc              String?
+  fromAccount       String?
+
+  // Salary base used for this run
+  revisedFixedSalary         Float @default(0)
+  revisedMonthlyRemuneration Float @default(0)
+
+  // Attendance
+  physicalPresentDays Float @default(0)
+  publicHolidays      Float @default(0)
+  payableDays         Float @default(0)
+  grossPayableDays    Float @default(30)
+
+  // PLI
+  pliPercent Float @default(0)
+  pliAmount  Float @default(0)
+
+  // Derived pay
+  proratedFixedSalary Float @default(0)
+  grossSalary         Float @default(0)
+
+  // Additions / deductions
+  incentive   Float @default(0)
+  expenseClaim Float @default(0)
+  deduction   Float @default(0)
+  netPayable  Float @default(0)
+
+  // Override
+  isOverridden   Boolean @default(false)
+  overrideAmount Float?
+  overrideReason String?
+
+  remarks String?
+  status  String @default("Draft") // Draft | Approved | Paid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([runId])
+  @@index([status])
+}
+
+// Singleton-ish key/value settings (calc config etc.)
+model Setting {
+  key   String @id
+  value String
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actor     String   @default("admin")
+  action    String   // e.g. OVERRIDE, APPROVE, MARK_PAID, IMPORT, EDIT
+  entity    String   // e.g. PayrollRecord
+  entityId  String?
+  detail    String?  // JSON string with before/after
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}
